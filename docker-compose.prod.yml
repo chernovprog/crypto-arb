@@ -1,0 +1,11 @@
+services:
+  postgres:
+    restart: always
+    
+  backend:
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+    restart: always
+
+  nginx:
+    restart: always
