@@ -2,11 +2,12 @@ services:
   postgres:
     image: postgres:18-alpine
     container_name: crypto-arb-postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USERNAME}
@@ -16,12 +17,26 @@ services:
     ports:
       - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: crypto-arb-core
+    image: backend:latest
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 512M
     ports:
       - "8080:8080"
     env_file:
@@ -34,16 +49,24 @@ services:
       - SPRING_FLYWAY_ENABLED=true
       - JWT_SECRET=${JWT_SECRET}
       - COINMARKETCAP_API_KEY=${COINMARKETCAP_API_KEY}
+      - JAVA_TOOL_OPTIONS=-Xms512M -Xmx768M -XX:+UseG1GC
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
       
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: crypto-arb-dash
+    image: frontend:latest
     volumes:
       - frontend_dist:/app/dist
       
@@ -52,13 +75,26 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     container_name: crypto-arb-nginx
+    image: nginx:stable
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
     ports:
       - "80:80"
     volumes:
       - frontend_dist:/usr/share/nginx/html:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "service", "nginx", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
