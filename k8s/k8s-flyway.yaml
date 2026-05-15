@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arb-flyway-migration
+spec:
+  template:
+    metadata:
+      labels:
+        app: flyway-migrator
+    spec:
+      containers:
+      - name: flyway
+        image: crypto-arb-flyway:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            flyway -url=jdbc:postgresql://${DATABASE_HOST}:$(PRIMARY_PORT)/$(DATABASE_NAME) \
+                   -user=$(DATABASE_USERNAME) \
+                   -password=$(DATABASE_PASSWORD) \
+                   -connectRetries=60 \
+                   migrate
+        envFrom:
+        - configMapRef:
+            name: arb-config
+        - secretRef:
+            name: arb-secrets
+      
+      restartPolicy: OnFailure

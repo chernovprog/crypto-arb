@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arb-config
+data:
+  DATABASE_HOST: "postgres-service"
+  DATABASE_NAME: "crypto_arb_db"
+  PRIMARY_PORT: "5432"
+  REPLICA_PORT: "5433"
+  SPRING_PROFILES_ACTIVE: "dev"
+  SPRING_FLYWAY_ENABLED: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: arb-secrets
+type: Opaque
+data:
+  DATABASE_USERNAME: 
+  DATABASE_PASSWORD: 
+  JWT_SECRET: 
+  COINMARKETCAP_API_KEY: 
