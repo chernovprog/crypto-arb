@@ -1,9 +1,10 @@
 services:
-
-  # --- DATABASE ---
-  postgres:
-    image: postgres:18-alpine
-    container_name: crypto-arb-postgres
+      
+  # --- DATABASE PRIMARY ---
+  postgres-primary:
+    image: postgres:16-alpine
+    container_name: postgres-primary
+    restart: unless-stopped
     deploy:
       resources:
         limits:
@@ -11,42 +12,99 @@ services:
         reservations:
           memory: 1G
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-secret}
+      POSTGRES_DB: ${DATABASE_NAME:-mydb}
+      POSTGRES_REPLICATION_USER: ${REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-replication_secret}
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./postgres/scripts/primary-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./postgres/config/primary.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command: >
+      postgres
+        -c config_file=/etc/postgresql/postgresql.conf
+        -c hba_file=/etc/postgresql/pg_hba.conf
     ports:
-      - "${DB_EXTERNAL_PORT}:${DB_INTERNAL_PORT}"
-    restart: unless-stopped
+      - "${PRIMARY_PORT:-5432}:5432"
+    networks:
+      - postgres-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-postgres} -d ${DATABASE_NAME:-mydb}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+      
+  # --- DATABASE REPLICA ---  
+  postgres-replica:
+    image: postgres:16-alpine
+    container_name: postgres-replica
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-secret}
+      POSTGRES_DB: ${DATABASE_NAME:-mydb}
+      REPLICATION_USER: ${REPLICATION_USER:-replicator}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-replication_secret}
+      PRIMARY_HOST: ${DATABASE_HOST}
+      PRIMARY_PORT: 5432
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./postgres/scripts/replica-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./postgres/config/replica.conf:/etc/postgresql/replica.conf:ro
+    command: |
+      bash -c "
+        if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+          echo 'Initializing replica via pg_basebackup...'
+          until pg_isready -h $${PRIMARY_HOST} -U $${POSTGRES_USER:-postgres}; do
+            echo 'Waiting for primary...'
+            sleep 2
+          done
+          PGPASSWORD=$${REPLICATION_PASSWORD} pg_basebackup -h $${PRIMARY_HOST} -U $${REPLICATION_USER:-replicator} -D /var/lib/postgresql/data -Xs -R -P
+          echo 'Base backup completed'
+          chmod 0700 /var/lib/postgresql/data
+          chown -R postgres:postgres /var/lib/postgresql/data
+        fi
+        exec gosu postgres postgres -c config_file=/etc/postgresql/replica.conf
+      "
+    ports:
+      - "${REPLICA_PORT:-5433}:5432"
+    networks:
+      - postgres-net
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-postgres} -d ${DATABASE_NAME:-mydb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
       
   # --- DATABASE MIGRATOR ---
   flyway:
-    image: flyway/flyway:10-alpine
-    command: -url=jdbc:postgresql://postgres:${DB_INTERNAL_PORT}/${DB_NAME} -user=${DB_USERNAME} -password=${DB_PASSWORD} -connectRetries=60 migrate
-    volumes:
-      - ./backend/src/main/resources/db/migration:/flyway/sql
+    build:
+      context: .
+      dockerfile: flyway/Dockerfile
+    image: crypto-arb-flyway:latest
+    command: -url=jdbc:postgresql://${DATABASE_HOST}:${PRIMARY_PORT}/${DATABASE_NAME} -user=${DATABASE_USERNAME} -password=${DATABASE_PASSWORD} -connectRetries=60 migrate
+    networks:
+      - postgres-net
     depends_on:
-      postgres:
+      postgres-primary:
         condition: service_healthy
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
+    restart: on-failure
     
   # --- BACKEND (SCALED) ---
-  backend:
+  backend-service:
     build:
       context: ./backend
       dockerfile: Dockerfile
     image: crypto-arb-backend:latest
     deploy:
-      replicas: 2
+      replicas: 1
       resources:
         limits:
           cpus: '1.0'
@@ -54,13 +112,15 @@ services:
         reservations:
           cpus: '0.25'
           memory: 512M
+    networks:
+      - postgres-net      
     env_file:
       - .env
     environment:
       - SPRING_PROFILES_ACTIVE=dev
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_HOST}:${DB_INTERNAL_PORT}/${DB_NAME}
-      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://${DATABASE_HOST}:${PRIMARY_PORT}/${DATABASE_NAME}
+      - SPRING_DATASOURCE_USERNAME=${DATABASE_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${DATABASE_PASSWORD}
       - SPRING_FLYWAY_ENABLED=false
       - JWT_SECRET=${JWT_SECRET}
       - COINMARKETCAP_API_KEY=${COINMARKETCAP_API_KEY}
@@ -76,43 +136,42 @@ services:
       retries: 5
       start_period: 60s
   
-  # --- FRONTEND (STATIC BUILDER) ---  
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: crypto-arb-dash
-    image: crypto-arb-frontend:latest
-    volumes:
-      - frontend_dist:/app/dist
-  
   # --- NGINX (LOAD BALANCER) ---  
   nginx:
     image: crypto-arb-nginx:stable
     container_name: crypto-arb-nginx
     build:
-      context: ./nginx
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: nginx/Dockerfile
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 256M
+    networks:
+      - postgres-net
     ports:
       - "80:80"
     volumes:
       - frontend_dist:/usr/share/nginx/html:ro
     depends_on:
-      backend:
+      backend-service:
         condition: service_healthy
-      frontend:
-        condition: service_completed_successfully
+      #frontend:
+        #condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-
+  
 volumes:
-  postgres_data:
+  postgres_primary_data:
+    driver: local
+  postgres_replica_data:
+    driver: local
   frontend_dist:
+
+networks:
+  postgres-net:
+    driver: bridge
