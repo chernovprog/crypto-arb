@@ -30,11 +30,11 @@ spec:
         - containerPort: 5432
         env:
         - name: POSTGRES_DB
-          valueFrom: { configMapKeyRef: { name: arb-config, key: DATABASE_NAME } }
+          valueFrom: { configMapKeyRef: { name: arb-config, key: PRIMARY_DATABASE_NAME } }
         - name: POSTGRES_USER
-          valueFrom: { secretKeyRef: { name: arb-secrets, key: DATABASE_USERNAME } }
+          valueFrom: { secretKeyRef: { name: arb-secrets, key: PRIMARY_DATABASE_USERNAME } }
         - name: POSTGRES_PASSWORD
-          valueFrom: { secretKeyRef: { name: arb-secrets, key: DATABASE_PASSWORD } }
+          valueFrom: { secretKeyRef: { name: arb-secrets, key: PRIMARY_DATABASE_PASSWORD } }
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data

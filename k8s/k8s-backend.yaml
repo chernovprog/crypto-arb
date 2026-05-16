@@ -34,13 +34,6 @@ spec:
             name: arb-config
         - secretRef:
             name: arb-secrets
-        env:
-        - name: SPRING_DATASOURCE_URL
-          value: "jdbc:postgresql://$(DATABASE_HOST):$(PRIMARY_PORT)/$(DATABASE_NAME)"
-        - name: SPRING_DATASOURCE_USERNAME
-          valueFrom: { secretKeyRef: { name: arb-secrets, key: DATABASE_USERNAME } }
-        - name: SPRING_DATASOURCE_PASSWORD
-          valueFrom: { secretKeyRef: { name: arb-secrets, key: DATABASE_PASSWORD } }
         livenessProbe:
           httpGet:
             path: /actuator/health

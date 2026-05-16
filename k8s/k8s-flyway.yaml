@@ -15,9 +15,9 @@ spec:
         command: ["/bin/sh", "-c"]
         args:
           - |
-            flyway -url=jdbc:postgresql://${DATABASE_HOST}:$(PRIMARY_PORT)/$(DATABASE_NAME) \
-                   -user=$(DATABASE_USERNAME) \
-                   -password=$(DATABASE_PASSWORD) \
+            flyway -url=jdbc:postgresql://${PRIMARY_DATABASE_HOST}:$(PRIMARY_DATABASE_PORT)/$(PRIMARY_DATABASE_NAME) \
+                   -user=$(PRIMARY_DATABASE_USERNAME) \
+                   -password=$(PRIMARY_DATABASE_PASSWORD) \
                    -connectRetries=60 \
                    migrate
         envFrom:
