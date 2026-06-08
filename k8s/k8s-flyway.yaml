@@ -8,9 +8,11 @@ spec:
       labels:
         app: flyway-migrator
     spec:
+      imagePullSecrets:
+        - name: dockerhub-secret
       containers:
       - name: flyway
-        image: crypto-arb-flyway:latest
+        image: andrii7/crypto-arb-flyway:latest
         imagePullPolicy: IfNotPresent
         command: ["/bin/sh", "-c"]
         args:

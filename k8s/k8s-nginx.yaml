@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: nginx-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: nginx
   ports:
@@ -24,8 +24,12 @@ spec:
       labels:
         app: nginx
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      imagePullSecrets:
+        - name: dockerhub-secret
       containers:
       - name: nginx
-        image: crypto-arb-nginx:stable
+        image: andrii7/crypto-arb-nginx:stable
         ports:
         - containerPort: 80
