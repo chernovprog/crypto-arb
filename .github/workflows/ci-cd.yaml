@@ -94,7 +94,7 @@ jobs:
         with:
           image-ref: 'crypto-arb-backend:temp'
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL'
