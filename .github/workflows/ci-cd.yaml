@@ -136,6 +136,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.IS_MAIN == 'true' && format('{0}/crypto-arb-flyway:latest\n{0}/crypto-arb-flyway:{1}', secrets.DOCKERHUB_USERNAME, github.ref_name) || format('{0}/crypto-arb-flyway:develop\n{0}/crypto-arb-flyway:sha-{1}', secrets.DOCKERHUB_USERNAME, github.sha) }}
+            ${{ env.IS_MAIN == 'true' && format('{0}/crypto-arb-flyway:latest', secrets.DOCKERHUB_USERNAME) || format('{0}/crypto-arb-flyway:develop', secrets.DOCKERHUB_USERNAME) }}
+            ${{ env.IS_MAIN == 'true' && format('{0}/crypto-arb-flyway:{1}', secrets.DOCKERHUB_USERNAME, github.ref_name) || format('{0}/crypto-arb-flyway:sha-{1}', secrets.DOCKERHUB_USERNAME, github.sha) }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
