@@ -44,8 +44,12 @@ cd crypto-arb
 * docker-compose up --build
 
 ## The application will be available at:
-* Frontend: http://localhost:5173
-* Backend API: http://localhost:8080
+* http://localhost
+
+## ⚠️ Prerequisite for local setup:
+To make Ingress work in your local cluster (Docker Desktop / Minikube), you must have the NGINX Ingress Controller installed.
+You can install it using the following command:
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
 ## 👤 Author
 Andrii Chernov (Full Stack Developer & DevOps)

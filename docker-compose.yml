@@ -118,14 +118,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-  
-  # --- NGINX (LOAD BALANCER) ---  
-  nginx:
-    image: crypto-arb-nginx:stable
-    container_name: crypto-arb-nginx
+      
+  # --- FRONTEND ---  
+  frontend:
     build:
-      context: .
-      dockerfile: nginx/Dockerfile
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: crypto-arb-frontend:latest
+    container_name: crypto-arb-frontend
     deploy:
       resources:
         limits:
@@ -133,22 +133,51 @@ services:
           memory: 256M
     networks:
       - postgres-net
-    ports:
-      - "80:80"
-    volumes:
-      - frontend_dist:/usr/share/nginx/html:ro
     depends_on:
       backend-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      test: ["CMD", "nginx", "-t"] # A simple check of the internal Nginx frontend's performance
       interval: 30s
       timeout: 10s
       retries: 3
+      
+   # --- REVERSE PROXY ---  
+  gateway:
+    image: nginx:alpine
+    container_name: crypto-arb-gateway
+    ports:
+      - "80:80"
+    networks:
+      - postgres-net
+    depends_on:
+      - frontend
+      - backend-service
+    command: >
+      sh -c "printf 'events {}
+      http {
+          server {
+              listen 80;
+              location /api/ {
+                  proxy_pass http://backend-service:8080;
+                  proxy_set_header Host $$host;
+              }
+              location /ws {
+                  proxy_pass http://backend-service:8080;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $$http_upgrade;
+                  proxy_set_header Connection \"Upgrade\";
+                  proxy_set_header Host $$host;
+              }
+              location / {
+                  proxy_pass http://frontend:80;
+                  proxy_set_header Host $$host;
+              }
+          }
+      }' > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"
   
 volumes:
   postgres_data:
-  frontend_dist:
   redis_data:
 
 networks:
