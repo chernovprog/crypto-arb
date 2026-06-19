@@ -31,5 +31,6 @@ spec:
       containers:
       - name: frontend
         image: andrii7/crypto-arb-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80

@@ -35,6 +35,7 @@ spec:
       containers:
       - name: backend
         image: andrii7/crypto-arb-backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         envFrom:
